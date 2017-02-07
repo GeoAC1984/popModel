@@ -88,6 +88,16 @@ else:
         # print redistributed_residual.sum(), 'total residual'
         
         projected_surface=capped_proj_surface-redistributed_residual#distribute extra pop to the masked surface
+        
         # print projected_surface.sum()
         # print 'pop2 difference', projected_surface.sum()-pop2
-
+        
+outfile=r'T:\PopulationModel\Testing\Jamaica\projected_surface_2050.tif'
+driver= gdal.GetDriverByName("GTiff")
+out_raster = driver.Create(outfile, cols, rows, 1, gdal.GDT_Float64)
+proj=pop.GetProjection()
+trans=pop.GetGeoTransform()
+out_raster.GetRasterBand(1).WriteArray(projected_surface)
+out_raster.GetRasterBand(1).SetNoDataValue(nodata_pop)
+out_raster.SetGeoTransform(trans)
+out_raster.SetProjection(proj)
