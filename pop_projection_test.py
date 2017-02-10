@@ -22,7 +22,7 @@ mm = np.ma.masked_values(mask_arr,nodata_mask)# mask no data in spatial mask
 
 scenario='SSP1' ## might be user input; keep as SSP1 for  now
 beta=1 
-base_year=2020# set the base
+base_year=2000# set the base
 proj_table=pd.read_excel(os.path.join(path,'Jamaica_popproj.xlsx'),index_col=[0,1]) ## the table with pop projection numbers
 scenario_subset=proj_table.filter(like=scenario,axis=0)## select a subset for scenario
 
@@ -36,7 +36,12 @@ moving_window[moving_window==1]=0 ## reset the 0 for area outside of the buffer
 for year in range(len(scenario_subset)):
     print 'base year:', base_year
     projection_year=base_year+10
-    in_raster='jampop{}.tif'.format(base_year)
+    if base_year==2000:
+        in_raster='jampop{}.tif'.format(base_year)
+        pop=gdal.Open(os.path.join(path,in_raster))
+        pop_arr= pop.ReadAsArray() 
+    else:
+        pop_arr= projected_surface           
 
     base_year=projection_year
     np.random.seed(42)
@@ -44,9 +49,7 @@ for year in range(len(scenario_subset)):
     SSP2='jam2010ssp21.tif'
     pop2=scenario_subset['TotalPop_IIASA'].ix[projection_year,scenario]
     print 'projected population number for ', projection_year, 'is ', pop2
-
-    pop=gdal.Open(os.path.join(path,in_raster))
-    pop_arr= pop.ReadAsArray()    
+    
     pop_arr = np.array(pop_arr, dtype=np.float64)
     mp = np.ma.masked_values(pop_arr,nodata_pop)
     pop1=np.sum(mp)
