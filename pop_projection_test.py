@@ -1,10 +1,9 @@
-### TO DO: create projected_surface fucntion, potential surface function for both positive and negative population growth
+### TO DO: create projected_surface function, potential surface function for both positive and negative population growth
 import pandas as pd
 import scipy
 from scipy import ndimage
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 from osgeo import gdal
 import os, math
 from astropy.table import Table
@@ -14,18 +13,32 @@ path='T:\PopulationModel\Testing\Jamaica'
 mask='jampctdl.tif' ##spatial mask; constant
 nodata_pop=2147483647
 nodata_mask=-3.40282346639e+038
-nodata_ru=65535
+nodata_ru=2147483647
 nodata_ur=2147483647
 
-habitable=gdal.Open(os.path.join(path,mask))
-mask_arr=habitable.ReadAsArray()
-mask_arr = np.array(mask_arr, dtype=np.float64)## assign type 64-bit float to avoiad overload from potentially big numbers
-mm = np.ma.masked_values(mask_arr,nodata_mask)# mask no data in spatial mask
+def read_tif(tif, nodata):
+    global path
+    pop=gdal.Open(os.path.join(path,tif))
+    pop_arr= pop.ReadAsArray()
+    pop_arr = np.array(pop_arr, dtype=np.float64)
+    mp = np.ma.masked_values(pop_arr,nodata)
+    return mp
+
+def write_tif(outfile, cols, rows, arr_data, nodata,trans,tproj):
+    driver= gdal.GetDriverByName("GTiff")    
+    out_raster= driver.Create(outfile, cols, rows,1, gdal.GDT_Float64)
+    out_raster.GetRasterBand(1).WriteArray(arr_data)
+    out_raster.GetRasterBand(1).SetNoDataValue(np.float64(nodata))
+    out_raster.SetGeoTransform(trans)
+    out_raster.SetProjection(proj)
+    
+rast=gdal.Open(os.path.join(path,mask))
+mm = read_tif(mask, nodata_mask)
 
 scenario='SSP1' ## might be user input; keep as SSP1 for  now
 urban_beta=1
 rural_beta=1
-base_year=2000# set the base
+base_year=1990# set the base
 proj_table=pd.read_excel(os.path.join(path,'Jamaica_popproj.xlsx'),index_col=[0,1]) ## the table with pop projection numbers
 scenario_subset=proj_table.filter(like=scenario,axis=0)## select a subset for scenario
 
@@ -43,26 +56,22 @@ urban_alpha= np.random.rand(8,18)
 np.random.seed(15)
 rural_alpha= np.random.rand(8,18) ## random+ reproducible for now (will be derived from calibration eventially)
 
-for year in range(len(scenario_subset-9)):
+for year in range(len(scenario_subset)-8):
     print 'base year:', base_year
     projection_year=base_year+10
-    if base_year==2000:
-        in_tot_pop='jamtotal{}.tif'.format('001')
-        in_urb_pop='jamurban{}.tif'.format('001')
-        in_rur_pop='jamrural{}.tif'.format('001')
+    if base_year==1990:
+        in_tot_pop='jamtotal{}.tif'.format('90')
+        in_urb_pop='jamurban{}.tif'.format('90')
+        in_rur_pop='jamrural{}.tif'.format('90')
         
-        tot_pop=gdal.Open(os.path.join(path,in_tot_pop))
-        tot_pop_arr= tot_pop.ReadAsArray()
-        
-        urb_pop=gdal.Open(os.path.join(path,in_urb_pop))
-        urb_pop_arr= urb_pop.ReadAsArray()
-        
-        rur_pop=gdal.Open(os.path.join(path,in_rur_pop))
-        rur_pop_arr= rur_pop.ReadAsArray() 
+        mtp=read_tif(in_tot_pop,nodata_pop)
+        mup=read_tif(in_urb_pop,nodata_ur)
+        mrp=read_tif(in_rur_pop,nodata_ru)       
     else:
-        tot_pop_arr= total_projected_surface
-        urb_pop_arr= urban_projected_surface
-        rur_pop_arr= rural_projected_surface
+        mtp= total_projected_surface
+        mup= urban_projected_surface
+        mrp= rural_projected_surface
+        print mtp
         
     base_year=projection_year
     # pop2=scenario_subset['TotalPop_IIASA'].ix[projection_year,scenario]
@@ -70,15 +79,6 @@ for year in range(len(scenario_subset-9)):
     pop2_rural=scenario_subset['RuralPop'].ix[projection_year,scenario]
     print 'projected urban population number for ', projection_year, 'is ', pop2_urban
     print 'projected rural population number for ', projection_year, 'is ', pop2_rural
-
-    tot_pop_arr = np.array(tot_pop_arr, dtype=np.float64)
-    mtp = np.ma.masked_values(tot_pop_arr,nodata_pop)
-
-    urb_pop_arr = np.array(urb_pop_arr, dtype=np.float64)
-    mup = np.ma.masked_values(urb_pop_arr,nodata_ur)
-
-    rur_pop_arr = np.array(rur_pop_arr, dtype=np.float64)
-    mrp = np.ma.masked_values(rur_pop_arr,nodata_ru)
 
     pop1_urban=np.sum(mup)
     urb_pop_change=pop2_urban-pop1_urban
@@ -156,35 +156,19 @@ for year in range(len(scenario_subset-9)):
     out_projection='jamtotal{}.tif'.format(projection_year)
     out_urban='jamurban{}.tif'.format(projection_year)
     out_rurall='jamrural{}.tif'.format(projection_year)
-    [rows, cols] = tot_pop_arr.shape
+    
+    [rows, cols] = mtp.shape
+    proj=rast.GetProjection()
+    trans=rast.GetGeoTransform()
 
-    outfile=os.path.join(path,out_projection)
-    outfile_urb=os.path.join(path,out_urban)
-    outfile_rur=os.path.join(path,out_rurall)
+    outfile=os.path.join(path,'projection', out_projection)
+    outfile_urb=os.path.join(path,'projection', out_urban)
+    outfile_rur=os.path.join(path,'projection',out_rurall) 
 
-##    driver= gdal.GetDriverByName("GTiff")    
-##    proj=tot_pop.GetProjection()
-##    trans=tot_pop.GetGeoTransform()
-##    out_raster0= driver.Create(outfile, cols, rows, 1, gdal.GDT_Float64)
-##    out_raster1= driver.Create(outfile_urb, cols, rows, 1, gdal.GDT_Float64)
-##    out_raster2= driver.Create(outfile_rur, cols, rows, 1, gdal.GDT_Float64)
-##
-##    out_raster0.GetRasterBand(1).WriteArray(total_projected_surface)
-##    out_raster0.GetRasterBand(1).SetNoDataValue(np.float64(nodata_pop))
-##
-##    out_raster1.GetRasterBand(1).WriteArray(urban_projected_surface)
-##    out_raster1.GetRasterBand(1).SetNoDataValue(np.float64(nodata_pop))
-##
-##    out_raster2.GetRasterBand(1).WriteArray(rural_projected_surface)
-##    out_raster2.GetRasterBand(1).SetNoDataValue(np.float64(nodata_pop))
-##
-##    out_raster0.SetGeoTransform(trans)
-##    out_raster0.SetProjection(proj)
-##    out_raster1.SetGeoTransform(trans)
-##    out_raster1.SetProjection(proj)
-##    out_raster2.SetGeoTransform(trans)
-##    out_raster2.SetProjection(proj)
-
+    write_tif(outfile, cols, rows, total_projected_surface, nodata_pop,trans,proj)
+    write_tif(outfile_urb, cols, rows, urban_projected_surface, nodata_pop,trans,proj)
+    write_tif(outfile_rur, cols, rows, rural_projected_surface, nodata_pop,trans,proj)
+    
     print 'Created projection for ', projection_year
 
 print 'Done'
