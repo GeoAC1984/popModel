@@ -1,4 +1,3 @@
-### TO DO: create projected_surface function, potential surface function for both positive and negative population growth
 import pandas as pd
 import scipy
 from scipy import ndimage
